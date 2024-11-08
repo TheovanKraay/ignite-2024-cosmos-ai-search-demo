@@ -45,16 +45,20 @@ if "cosmos_client" not in st.session_state:
         full_text_policy={
             "defaultLanguage": "en-US",
             "fullTextPaths": [
-                {"path": "/abstract"}
+                {
+                    "path": "/" + cosmos_full_text_property,
+                    "language": "en-US",
+                }
             ]
         },
         vector_embedding_policy={
             "vectorEmbeddings": [
                 {
-                    "vectorProperty": cosmos_vector_property,
-                    "dimensions": openai_embeddings_dimensions,
-                    "metric": "cosine"
-                }
+                    "path": "/" + cosmos_vector_property,
+                    "dataType": "float32",
+                    "distanceFunction": "cosine",
+                    "dimensions": openai_embeddings_dimensions
+                },
             ]
         },
         offer_throughput=50000
@@ -68,16 +72,20 @@ if "cosmos_client" not in st.session_state:
         full_text_policy={
             "defaultLanguage": "en-US",
             "fullTextPaths": [
-                {"path": "/abstract"}
+                {
+                    "path": "/" + cosmos_full_text_property,
+                    "language": "en-US",
+                }
             ]
         },
         vector_embedding_policy={
             "vectorEmbeddings": [
                 {
-                    "vectorProperty": cosmos_vector_property,
-                    "dimensions": openai_embeddings_dimensions,
-                    "metric": "cosine"
-                }
+                    "path": "/" + cosmos_vector_property,
+                    "dataType": "float32",
+                    "distanceFunction": "cosine",
+                    "dimensions": openai_embeddings_dimensions
+                },
             ]
         },
         indexing_policy={
@@ -89,16 +97,13 @@ if "cosmos_client" not in st.session_state:
             ],
             "vectorIndexes": [
                 {
-                    "vectorProperty": cosmos_vector_property,
-                    "dimensions": openai_embeddings_dimensions,
-                    "metric": "cosine",
-                    "algorithm": "QFLAT"
+                    "path": "/" + cosmos_vector_property,
+                    "type": "quantizedFlat",
                 }
             ],
             "fullTextIndexes": [
                 {
-                    "fullTextProperty": cosmos_full_text_property,
-                    "language": "en-US"
+                    "path": "/" + cosmos_full_text_property
                 }
             ]
         },
@@ -113,16 +118,20 @@ if "cosmos_client" not in st.session_state:
         full_text_policy={
             "defaultLanguage": "en-US",
             "fullTextPaths": [
-                {"path": "/abstract"}
+                {
+                    "path": "/" + cosmos_full_text_property,
+                    "language": "en-US",
+                }
             ]
         },
         vector_embedding_policy={
             "vectorEmbeddings": [
                 {
-                    "vectorProperty": cosmos_vector_property,
-                    "dimensions": openai_embeddings_dimensions,
-                    "metric": "cosine"
-                }
+                    "path": "/" + cosmos_vector_property,
+                    "dataType": "float32",
+                    "distanceFunction": "cosine",
+                    "dimensions": openai_embeddings_dimensions
+                },
             ]
         },
         indexing_policy={
@@ -134,16 +143,13 @@ if "cosmos_client" not in st.session_state:
             ],
             "vectorIndexes": [
                 {
-                    "vectorProperty": cosmos_vector_property,
-                    "dimensions": openai_embeddings_dimensions,
-                    "metric": "cosine",
-                    "algorithm": "DiskANN"
+                    "path": "/" + cosmos_vector_property,
+                    "type": "diskANN",
                 }
             ],
             "fullTextIndexes": [
                 {
-                    "fullTextProperty": cosmos_full_text_property,
-                    "language": "en-US"
+                    "path": "/" + cosmos_full_text_property
                 }
             ]
         },
