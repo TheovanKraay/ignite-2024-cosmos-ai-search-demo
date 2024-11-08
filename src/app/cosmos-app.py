@@ -10,9 +10,6 @@ from azure.cosmos import CosmosClient, exceptions, PartitionKey
 from dotenv import load_dotenv
 import time
 
-
-
-
 # Load environment variables
 load_dotenv()
 
@@ -24,6 +21,7 @@ empty_search_helper = "Enter text relating to an area of research to get started
 semantic_search_header = "Similarity search..."
 semantic_search_placeholder = "A Cantorian fractal spacetime"
 vector_search_label = "Similarity search for papers"
+full_text_search_label = "Full text search for papers"
 venue_list_header = "Research papers"
 
 # Initialize global variables for Cosmos DB client, database, and containers
@@ -31,7 +29,7 @@ if "cosmos_client" not in st.session_state:
     endpoint = os.getenv("AZURE_COSMOSDB_ENDPOINT")
     key = os.getenv("AZURE_COSMOSDB_KEY")
     st.session_state.cosmos_client = CosmosClient(endpoint, credential=key)
-    database_name = 'ignite2024demo'  # Replace with your database name
+    database_name = 'a-ignite2024demo'  # Replace with your database name
     st.session_state.cosmos_database = st.session_state.cosmos_client.create_database_if_not_exists(database_name)
 
     # Define the vector property and dimensions
@@ -145,6 +143,14 @@ if "cosmos_client" not in st.session_state:
         offer_throughput=50000
     )
 
+# Initialize session state variables
+if "embedding_gen_time" not in st.session_state:
+    st.session_state.embedding_gen_time = ""
+if "query_time" not in st.session_state:
+    st.session_state.query_time = ""
+if "ru_consumed" not in st.session_state:
+    st.session_state.ru_consumed = ""
+
 # Function to log times
 def log_time(start):
     end = time.perf_counter()
@@ -208,15 +214,26 @@ def handler_vector_search(indices, ask):
     except exceptions.CosmosHttpResponseError as e:
         st.error(f"An error occurred: {e}")
 
-def handler_text_search(indices, text):
+def handler_text_search(indices, text, search_type):
     num_results = 10
 
+    # Tokenize text into individual words
+    keywords = text.split()  # Split the text into words
+    formatted_keywords = ', '.join(f'"{keyword}"' for keyword in keywords)  # Format keywords for query
 
-    full_text_contains_search_query = '''
-    SELECT TOP @num_results l.id, l.title, l.abstract, 
-    FROM l
-    WHERE FullTextContains(l.abstract, @text)
-    '''
+    # Construct the query string with tokenized keywords
+    if search_type == "all keywords":
+        full_text_search_query = f'''
+        SELECT TOP @num_results l.id, l.title, l.abstract
+        FROM l
+        WHERE FullTextContainsAll(l.abstract, {formatted_keywords})
+        '''
+    else:
+        full_text_search_query = f'''
+        SELECT TOP @num_results l.id, l.title, l.abstract
+        FROM l
+        WHERE FullTextContainsAny(l.abstract, {formatted_keywords})
+        '''
 
     container = {
         'No Index': st.session_state.cosmos_container,
@@ -225,13 +242,12 @@ def handler_text_search(indices, text):
     }.get(indices)
 
     parameters = [
-        {"name": "@num_results", "value": num_results},
-        {"name": "@emb", "value": text}
+        {"name": "@num_results", "value": num_results}
     ]
 
     try:
         start_time = time.perf_counter()  # Capture start time
-        results = container.query_items(full_text_contains_search_query, parameters=parameters, enable_cross_partition_query=True)
+        results = container.query_items(full_text_search_query, parameters=parameters, enable_cross_partition_query=True)
         results_list = list(results)
         elapsed_time = log_time(start_time)
         st.session_state.suggested_listings = pd.DataFrame(results_list)
@@ -250,6 +266,7 @@ def render_cta_link(url, label, font_awesome_icon):
 
 def render_search():
     search_disabled = True
+    full_text_search_disabled = True
     with st.sidebar:
         st.selectbox(label="Index", options=['No Index', 'QFLAT Index', 'DiskANN Index & Full Text'], index=0, key="index_selection")
         st.text_input(label=semantic_search_header, placeholder=semantic_search_placeholder, key="user_category_query")
@@ -259,6 +276,16 @@ def render_search():
 
         st.button(label=vector_search_label, key="location_search", disabled=search_disabled,
                   on_click=handler_vector_search, args=(st.session_state.index_selection, st.session_state.user_category_query))
+
+        st.text_input(label=full_text_search_label, placeholder=semantic_search_placeholder, key="user_full_text_query")
+
+        search_type = st.radio("Search type", options=["all keywords", "any keywords"], key="full_text_search_type")
+
+        if "user_full_text_query" in st.session_state and st.session_state.user_full_text_query != "":
+            full_text_search_disabled = False
+
+        st.button(label=full_text_search_label, key="full_text_search", disabled=full_text_search_disabled,
+                  on_click=handler_text_search, args=(st.session_state.index_selection, st.session_state.user_full_text_query, search_type))
 
         st.write("---")
         render_cta_link(url="https://azurecosmosdb.github.io/gallery/", label="Cosmos DB Samples Gallery", font_awesome_icon="fa-cosmosdb")
