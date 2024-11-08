@@ -63,8 +63,9 @@ if "cosmos_client" not in st.session_state:
                 },
             ]
         },
-        offer_throughput=50000
+        offer_throughput=10000
     )
+
 
     # Create listings_search_qflat container with QFLAT vector index
     container_name_qflat = 'search_qflat'
@@ -109,7 +110,7 @@ if "cosmos_client" not in st.session_state:
                 }
             ]
         },
-        offer_throughput=50000
+        offer_throughput=10000
     )
 
     # Create listings_search_diskann container with DiskANN vector index
@@ -155,7 +156,7 @@ if "cosmos_client" not in st.session_state:
                 }
             ]
         },
-        offer_throughput=50000
+        offer_throughput=10000
     )
 
 # Initialize session state variables
