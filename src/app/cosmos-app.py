@@ -15,8 +15,8 @@ load_dotenv()
 
 st.set_page_config(page_title="Ignite 2024 Demo", layout="wide", initial_sidebar_state="expanded")
 # UI text strings
-page_title = "Cosmos DB DiskANN vs QFLAT Index"
-page_helper = "The Streamlit app uses cosine similarity to semantically match your query with vectors in Cosmos DB. "
+page_title = "Cosmos DB Ignite 2024 - AI Search Demo"
+page_helper = "The Streamlit app uses a variety of new search types realeased at Ignite 2024 to match query text with records in Cosmos DB. "
 empty_search_helper = "Enter text relating to an area of research to get started."
 semantic_search_header = "Similarity search..."
 semantic_search_placeholder = "A Cantorian fractal spacetime"
@@ -42,14 +42,19 @@ if "cosmos_client" not in st.session_state:
     st.session_state.cosmos_container = st.session_state.cosmos_database.create_container_if_not_exists(
         id=container_name,
         partition_key=PartitionKey(path="/id"),
+        full_text_policy={
+            "defaultLanguage": "en-US",
+            "fullTextPaths": [
+                {"path": "/abstract"}
+            ]
+        },
         vector_embedding_policy={
             "vectorEmbeddings": [
                 {
-                    "path": "/" + cosmos_vector_property,
-                    "dataType": "float32",
-                    "distanceFunction": "cosine",
-                    "dimensions": openai_embeddings_dimensions
-                },
+                    "vectorProperty": cosmos_vector_property,
+                    "dimensions": openai_embeddings_dimensions,
+                    "metric": "cosine"
+                }
             ]
         },
         offer_throughput=50000
@@ -60,33 +65,41 @@ if "cosmos_client" not in st.session_state:
     st.session_state.cosmos_container_qflat = st.session_state.cosmos_database.create_container_if_not_exists(
         id=container_name_qflat,
         partition_key=PartitionKey(path="/id"),
-        indexing_policy={
-            "includedPaths": [
-                {
-                    "path": "/*"
-                }
-            ],
-            "excludedPaths": [
-                {
-                    "path": "/\"_etag\"/?",
-                    "path": "/" + cosmos_vector_property + "/*",
-                }
-            ],
-            "vectorIndexes": [
-                {
-                    "path": "/" + cosmos_vector_property,
-                    "type": "quantizedFlat",
-                }
+        full_text_policy={
+            "defaultLanguage": "en-US",
+            "fullTextPaths": [
+                {"path": "/abstract"}
             ]
         },
         vector_embedding_policy={
             "vectorEmbeddings": [
                 {
-                    "path": "/" + cosmos_vector_property,
-                    "dataType": "float32",
-                    "distanceFunction": "cosine",
-                    "dimensions": openai_embeddings_dimensions
-                },
+                    "vectorProperty": cosmos_vector_property,
+                    "dimensions": openai_embeddings_dimensions,
+                    "metric": "cosine"
+                }
+            ]
+        },
+        indexing_policy={
+            "includedPaths": [
+                {"path": "/*"}
+            ],
+            "excludedPaths": [
+                {"path": "/\"_etag\"/?"}
+            ],
+            "vectorIndexes": [
+                {
+                    "vectorProperty": cosmos_vector_property,
+                    "dimensions": openai_embeddings_dimensions,
+                    "metric": "cosine",
+                    "algorithm": "QFLAT"
+                }
+            ],
+            "fullTextIndexes": [
+                {
+                    "fullTextProperty": cosmos_full_text_property,
+                    "language": "en-US"
+                }
             ]
         },
         offer_throughput=50000
@@ -100,44 +113,38 @@ if "cosmos_client" not in st.session_state:
         full_text_policy={
             "defaultLanguage": "en-US",
             "fullTextPaths": [
-                {
-                    "path": "/" + cosmos_full_text_property,
-                    "language": "en-US",
-                }
-            ]
-        },
-        indexing_policy={
-            "includedPaths": [
-                {
-                    "path": "/*"
-                }
-            ],
-            "excludedPaths": [
-                {
-                    "path": "/\"_etag\"/?",
-                    "path": "/" + cosmos_vector_property + "/*",
-                }
-            ],
-            "vectorIndexes": [
-                {
-                    "path": "/" + cosmos_vector_property,
-                    "type": "diskANN",
-                }
-            ],
-            "fullTextIndexes": [
-                {
-                    "path": "/" + cosmos_full_text_property
-                }
+                {"path": "/abstract"}
             ]
         },
         vector_embedding_policy={
             "vectorEmbeddings": [
                 {
-                    "path": "/" + cosmos_vector_property,
-                    "dataType": "float32",
-                    "distanceFunction": "cosine",
-                    "dimensions": openai_embeddings_dimensions
-                },
+                    "vectorProperty": cosmos_vector_property,
+                    "dimensions": openai_embeddings_dimensions,
+                    "metric": "cosine"
+                }
+            ]
+        },
+        indexing_policy={
+            "includedPaths": [
+                {"path": "/*"}
+            ],
+            "excludedPaths": [
+                {"path": "/\"_etag\"/?"}
+            ],
+            "vectorIndexes": [
+                {
+                    "vectorProperty": cosmos_vector_property,
+                    "dimensions": openai_embeddings_dimensions,
+                    "metric": "cosine",
+                    "algorithm": "DiskANN"
+                }
+            ],
+            "fullTextIndexes": [
+                {
+                    "fullTextProperty": cosmos_full_text_property,
+                    "language": "en-US"
+                }
             ]
         },
         offer_throughput=50000
@@ -150,6 +157,8 @@ if "query_time" not in st.session_state:
     st.session_state.query_time = ""
 if "ru_consumed" not in st.session_state:
     st.session_state.ru_consumed = ""
+if "executed_query" not in st.session_state:
+    st.session_state.executed_query = ""
 
 # Function to log times
 def log_time(start):
@@ -186,26 +195,24 @@ def handler_vector_search(indices, ask):
     num_results = 10
 
     # Query strings
-    vector_search_query = '''
-    SELECT TOP @num_results l.id, l.title, l.abstract, VectorDistance(l.embedding, @emb) as SimilarityScore
+    vector_search_query = f'''
+    SELECT TOP {num_results} l.id, l.title, l.abstract, VectorDistance(l.embedding, {emb}) as SimilarityScore
     FROM l
-    ORDER BY VectorDistance(l.embedding,@emb)
+    ORDER BY VectorDistance(l.embedding,{emb})
     '''
+
+    obfuscated_query = vector_search_query.replace(str(emb), "REDACTED")
 
     container = {
         'No Index': st.session_state.cosmos_container,
-        'QFLAT Index': st.session_state.cosmos_container_qflat,
-        'DiskANN Index & Full Text': st.session_state.cosmos_container_diskann
+        'QFLAT & Full Text Search Index': st.session_state.cosmos_container_qflat,
+        'DiskANN & Full Text Search Index': st.session_state.cosmos_container_diskann
     }.get(indices)
-
-    parameters = [
-        {"name": "@num_results", "value": num_results},
-        {"name": "@emb", "value": emb}
-    ]
 
     try:
         start_time = time.perf_counter()  # Capture start time
-        results = container.query_items(vector_search_query, parameters=parameters, enable_cross_partition_query=True)
+        st.session_state.executed_query = obfuscated_query
+        results = container.query_items(vector_search_query, enable_cross_partition_query=True)
         results_list = list(results)
         elapsed_time = log_time(start_time)
         st.session_state.suggested_listings = pd.DataFrame(results_list)
@@ -224,30 +231,27 @@ def handler_text_search(indices, text, search_type):
     # Construct the query string with tokenized keywords
     if search_type == "all keywords":
         full_text_search_query = f'''
-        SELECT TOP @num_results l.id, l.title, l.abstract
+        SELECT TOP {num_results} l.id, l.title, l.abstract
         FROM l
         WHERE FullTextContainsAll(l.abstract, {formatted_keywords})
         '''
     else:
         full_text_search_query = f'''
-        SELECT TOP @num_results l.id, l.title, l.abstract
+        SELECT TOP {num_results} l.id, l.title, l.abstract
         FROM l
         WHERE FullTextContainsAny(l.abstract, {formatted_keywords})
         '''
 
     container = {
         'No Index': st.session_state.cosmos_container,
-        'QFLAT Index': st.session_state.cosmos_container_qflat,
-        'DiskANN Index & Full Text': st.session_state.cosmos_container_diskann
+        'QFLAT & Full Text Search Index': st.session_state.cosmos_container_qflat,
+        'DiskANN & Full Text Search Index': st.session_state.cosmos_container_diskann
     }.get(indices)
-
-    parameters = [
-        {"name": "@num_results", "value": num_results}
-    ]
 
     try:
         start_time = time.perf_counter()  # Capture start time
-        results = container.query_items(full_text_search_query, parameters=parameters, enable_cross_partition_query=True)
+        st.session_state.executed_query = full_text_search_query
+        results = container.query_items(full_text_search_query, enable_cross_partition_query=True)
         results_list = list(results)
         elapsed_time = log_time(start_time)
         st.session_state.suggested_listings = pd.DataFrame(results_list)
@@ -268,7 +272,7 @@ def render_search():
     search_disabled = True
     full_text_search_disabled = True
     with st.sidebar:
-        st.selectbox(label="Index", options=['No Index', 'QFLAT Index', 'DiskANN Index & Full Text'], index=0, key="index_selection")
+        st.selectbox(label="Index", options=['No Index', 'QFLAT & Full Text Search Index', 'DiskANN & Full Text Search Index'], index=0, key="index_selection")
         st.text_input(label=semantic_search_header, placeholder=semantic_search_placeholder, key="user_category_query")
 
         if "user_category_query" in st.session_state and st.session_state.user_category_query != "":
@@ -295,6 +299,7 @@ def render_search():
 
 def render_search_result():
     col1 = st.container()
+    col1.write(f"Executed query: {st.session_state.executed_query}")
     col1.write(f"Found {len(st.session_state.suggested_listings)} listings.")
     col1.write(f"Embedding generation time: {st.session_state.embedding_gen_time}")
     col1.write(f"Query time: {st.session_state.query_time}")
