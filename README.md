@@ -1,6 +1,6 @@
-# Comparing DiskANN and Quantized Flat Indexes for Semantic Search in Azure Cosmos DB.
+# Ignite AI Search Demo - Azure Cosmos DB.
 
-This repository contains a Python Streamlit application that allows users to search for research papers using semantic search powered by OpenAI embeddings and Azure Cosmos DB. The application uses cosine similarity to match user queries with research papers and displays the results.
+This repository contains a Python Streamlit application that allows users to search for research papers using semantic search powered by OpenAI embeddings and Azure Cosmos DB. The application includes vector search, full text search, text ranking, and hybrid search. Three containers with no index, qflat, and DiskANN indexes are created. 
 
 ![screenshot](media/screen-shot.png)
 
@@ -8,7 +8,7 @@ This repository contains a Python Streamlit application that allows users to sea
 
 - Semantic search for research paper abstracts using OpenAI embeddings.
 - Integration with Azure Cosmos DB for storing and querying papers.
-- Support for different vector indexing methods (No Index, Qflat Index, DiskANN Index).
+- Support for different search methods (No Index, Qflat Index, DiskANN Index).
 - Interactive UI built with Streamlit.
 
 ## Prerequisites
@@ -20,7 +20,7 @@ This repository contains a Python Streamlit application that allows users to sea
 
 1. **Clone the repository**:
    ```sh
-   git clone https://github.com/TheovanKraay/ignite-2024-diskann-demo.git
+   git clone https://github.com/TheovanKraay/ignite-2024-ai-search-demo.git
    ```
 
 1. **Create file name ".env" in the "app" folder, and update with required environment variables for Azure Cosmos DB and Azure OpenAI**
