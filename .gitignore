@@ -4,4 +4,5 @@
 .azure
 .idea
 .deployment
+.vscode
 venv
