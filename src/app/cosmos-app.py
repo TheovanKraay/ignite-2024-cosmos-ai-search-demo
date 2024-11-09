@@ -31,7 +31,7 @@ if "cosmos_client" not in st.session_state:
     endpoint = os.getenv("AZURE_COSMOSDB_ENDPOINT")
     key = os.getenv("AZURE_COSMOSDB_KEY")
     st.session_state.cosmos_client = CosmosClient(endpoint, credential=key)
-    database_name = 'a-ignite2024demo'  # Replace with your database name
+    database_name = 'ignite2024demov1'  # Replace with your database name
     st.session_state.cosmos_database = st.session_state.cosmos_client.create_database_if_not_exists(database_name)
 
     # Define the vector property and dimensions
@@ -39,30 +39,73 @@ if "cosmos_client" not in st.session_state:
     cosmos_full_text_property = "abstract"
     openai_embeddings_dimensions = 1536
 
+    # policies and indexes
+    full_text_policy = {
+        "defaultLanguage": "en-US",
+        "fullTextPaths": [
+            {
+                "path": "/" + cosmos_full_text_property,
+                "language": "en-US",
+            }
+        ]
+    }
+    vector_embedding_policy = {
+        "vectorEmbeddings": [
+            {
+                "path": "/" + cosmos_vector_property,
+                "dataType": "float32",
+                "distanceFunction": "cosine",
+                "dimensions": openai_embeddings_dimensions
+            },
+        ]
+    }
+    qflat_indexing_policy = {
+        "includedPaths": [
+            {"path": "/*"}
+        ],
+        "excludedPaths": [
+            {"path": "/\"_etag\"/?"}
+        ],
+        "vectorIndexes": [
+            {
+                "path": "/" + cosmos_vector_property,
+                "type": "quantizedFlat",
+            }
+        ],
+        "fullTextIndexes": [
+            {
+                "path": "/" + cosmos_full_text_property
+            }
+        ]
+    }
+
+    diskann_indexing_policy = {
+        "includedPaths": [
+            {"path": "/*"}
+        ],
+        "excludedPaths": [
+            {"path": "/\"_etag\"/?"}
+        ],
+        "vectorIndexes": [
+            {
+                "path": "/" + cosmos_vector_property,
+                "type": "diskANN",
+            }
+        ],
+        "fullTextIndexes": [
+            {
+                "path": "/" + cosmos_full_text_property
+            }
+        ]
+    }
+
     # Create listings_search container without any index
     container_name = 'search'
     st.session_state.cosmos_container = st.session_state.cosmos_database.create_container_if_not_exists(
         id=container_name,
         partition_key=PartitionKey(path="/id"),
-        full_text_policy={
-            "defaultLanguage": "en-US",
-            "fullTextPaths": [
-                {
-                    "path": "/" + cosmos_full_text_property,
-                    "language": "en-US",
-                }
-            ]
-        },
-        vector_embedding_policy={
-            "vectorEmbeddings": [
-                {
-                    "path": "/" + cosmos_vector_property,
-                    "dataType": "float32",
-                    "distanceFunction": "cosine",
-                    "dimensions": openai_embeddings_dimensions
-                },
-            ]
-        },
+        full_text_policy=full_text_policy,
+        vector_embedding_policy=vector_embedding_policy,
         offer_throughput=10000
     )
 
@@ -72,44 +115,9 @@ if "cosmos_client" not in st.session_state:
     st.session_state.cosmos_container_qflat = st.session_state.cosmos_database.create_container_if_not_exists(
         id=container_name_qflat,
         partition_key=PartitionKey(path="/id"),
-        full_text_policy={
-            "defaultLanguage": "en-US",
-            "fullTextPaths": [
-                {
-                    "path": "/" + cosmos_full_text_property,
-                    "language": "en-US",
-                }
-            ]
-        },
-        vector_embedding_policy={
-            "vectorEmbeddings": [
-                {
-                    "path": "/" + cosmos_vector_property,
-                    "dataType": "float32",
-                    "distanceFunction": "cosine",
-                    "dimensions": openai_embeddings_dimensions
-                },
-            ]
-        },
-        indexing_policy={
-            "includedPaths": [
-                {"path": "/*"}
-            ],
-            "excludedPaths": [
-                {"path": "/\"_etag\"/?"}
-            ],
-            "vectorIndexes": [
-                {
-                    "path": "/" + cosmos_vector_property,
-                    "type": "quantizedFlat",
-                }
-            ],
-            "fullTextIndexes": [
-                {
-                    "path": "/" + cosmos_full_text_property
-                }
-            ]
-        },
+        full_text_policy=full_text_policy,
+        vector_embedding_policy=vector_embedding_policy,
+        indexing_policy=qflat_indexing_policy,
         offer_throughput=10000
     )
 
@@ -118,44 +126,9 @@ if "cosmos_client" not in st.session_state:
     st.session_state.cosmos_container_diskann = st.session_state.cosmos_database.create_container_if_not_exists(
         id=container_name_diskann,
         partition_key=PartitionKey(path="/id"),
-        full_text_policy={
-            "defaultLanguage": "en-US",
-            "fullTextPaths": [
-                {
-                    "path": "/" + cosmos_full_text_property,
-                    "language": "en-US",
-                }
-            ]
-        },
-        vector_embedding_policy={
-            "vectorEmbeddings": [
-                {
-                    "path": "/" + cosmos_vector_property,
-                    "dataType": "float32",
-                    "distanceFunction": "cosine",
-                    "dimensions": openai_embeddings_dimensions
-                },
-            ]
-        },
-        indexing_policy={
-            "includedPaths": [
-                {"path": "/*"}
-            ],
-            "excludedPaths": [
-                {"path": "/\"_etag\"/?"}
-            ],
-            "vectorIndexes": [
-                {
-                    "path": "/" + cosmos_vector_property,
-                    "type": "diskANN",
-                }
-            ],
-            "fullTextIndexes": [
-                {
-                    "path": "/" + cosmos_full_text_property
-                }
-            ]
-        },
+        full_text_policy=full_text_policy,
+        vector_embedding_policy=vector_embedding_policy,
+        indexing_policy=diskann_indexing_policy,
         offer_throughput=10000
     )
 
