@@ -31,12 +31,12 @@ if "cosmos_client" not in st.session_state:
     endpoint = os.getenv("AZURE_COSMOSDB_ENDPOINT")
     key = os.getenv("AZURE_COSMOSDB_KEY")
     st.session_state.cosmos_client = CosmosClient(endpoint, credential=key)
-    database_name = 'ignite2024demov1'  # Replace with your database name
+    database_name = 'ignite2024demo'  # Replace with your database name
     st.session_state.cosmos_database = st.session_state.cosmos_client.create_database_if_not_exists(database_name)
 
     # Define the vector property and dimensions
     cosmos_vector_property = "embedding"
-    cosmos_full_text_property = "abstract"
+    cosmos_full_text_property = "text"
     openai_embeddings_dimensions = 1536
 
     # policies and indexes
@@ -180,7 +180,7 @@ def handler_vector_search(indices, ask):
 
     # Query strings
     vector_search_query = f'''
-    SELECT TOP {num_results} l.id, l.title, l.abstract, VectorDistance(l.embedding, {emb}) as SimilarityScore
+    SELECT TOP {num_results} l.id, l.title, l.text, VectorDistance(l.embedding, {emb}) as SimilarityScore
     FROM l
     ORDER BY VectorDistance(l.embedding,{emb})
     '''
@@ -218,15 +218,15 @@ def handler_text_search(indices, text, search_type):
     # Construct the query string with tokenized keywords
     if search_type == "all keywords":
         full_text_search_query = f'''
-        SELECT TOP {num_results} l.id, l.title, l.abstract
+        SELECT TOP {num_results} l.id, l.title, l.text
         FROM l
-        WHERE FullTextContainsAll(l.abstract, {formatted_keywords})
+        WHERE FullTextContainsAll(l.text, {formatted_keywords})
         '''
     else:
         full_text_search_query = f'''
-        SELECT TOP {num_results} l.id, l.title, l.abstract
+        SELECT TOP {num_results} l.id, l.title, l.text
         FROM l
-        WHERE FullTextContainsAny(l.abstract, {formatted_keywords})
+        WHERE FullTextContainsAny(l.text, {formatted_keywords})
         '''
 
     container = {
@@ -259,9 +259,9 @@ def handler_text_ranking(indices, text):
     # Construct the query string with tokenized keywords
 
     full_text_ranking_query = f'''
-    SELECT TOP {num_results} l.id, l.title, l.abstract
+    SELECT TOP {num_results} l.id, l.title, l.text
     FROM l
-    ORDER BY RANK FullTextScore(l.abstract, [{formatted_keywords}])
+    ORDER BY RANK FullTextScore(l.text, [{formatted_keywords}])
     '''
 
     container = {
@@ -294,9 +294,9 @@ def handler_hybrid_ranking(indices, text):
     # Construct the query string with tokenized keywords
 
     full_hybrid_ranking_query = f'''
-    SELECT TOP {num_results} l.id, l.title, l.abstract
+    SELECT TOP {num_results} l.id, l.title, l.text
     FROM l
-    ORDER BY RANK RRF(FullTextScore(l.abstract,[{formatted_keywords}]),VectorDistance(l.embedding, {emb}))
+    ORDER BY RANK RRF(FullTextScore(l.text,[{formatted_keywords}]),VectorDistance(l.embedding, {emb}))
     '''
 
     obfuscated_query = full_hybrid_ranking_query.replace(str(emb), "REDACTED")
