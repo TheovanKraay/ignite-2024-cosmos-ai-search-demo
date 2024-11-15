@@ -15,7 +15,7 @@ load_dotenv()
 
 st.set_page_config(page_title="Ignite 2024 Demo", layout="wide", initial_sidebar_state="expanded")
 # UI text strings
-page_title = "Cosmos DB Ignite 2024 - AI Search Demo"
+page_title = "Azure Cosmos DB - Search Demo"
 page_helper = "The Streamlit app uses a variety of new search types released at Ignite 2024 to match query text with records in Cosmos DB."
 empty_search_helper = "Enter text relating to an area of research to get started."
 semantic_search_header = "Search input"
@@ -141,6 +141,8 @@ if "ru_consumed" not in st.session_state:
     st.session_state.ru_consumed = ""
 if "executed_query" not in st.session_state:
     st.session_state.executed_query = ""
+if "server_query_time" not in st.session_state:
+    st.session_state.server_query_time = ""
 
 # Function to log times
 def log_time(start):
@@ -194,12 +196,14 @@ def handler_vector_search(indices, ask):
     try:
         start_time = time.perf_counter()  # Capture start time
         st.session_state.executed_query = obfuscated_query
-        results = container.query_items(vector_search_query, enable_cross_partition_query=True)
+        results = container.query_items(vector_search_query, enable_cross_partition_query=True, populate_query_metrics=True)
         results_list = list(results)
         elapsed_time = log_time(start_time)
         st.session_state.suggested_listings = pd.DataFrame(results_list)
         st.session_state.query_time = elapsed_time
         st.session_state.ru_consumed = container.client_connection.last_response_headers['x-ms-request-charge']
+        total_execution_time = parse_server_query_time(container.client_connection.last_response_headers['x-ms-documentdb-query-metrics'])
+        st.session_state.server_query_time = total_execution_time
     except exceptions.CosmosHttpResponseError as e:
         st.error(f"An error occurred: {e}")
 
@@ -208,7 +212,8 @@ def handler_text_search(indices, text, search_type):
 
     # Tokenize text into individual words
     keywords = text.split()  # Split the text into words
-    formatted_keywords = ', '.join(f'"{keyword}"' for keyword in keywords)  # Format keywords for query
+    formatted_keywords = ', '.join(f'"{keyword}"' for keyword in keywords)
+    print(formatted_keywords)# Format keywords for query
 
     # Construct the query string with tokenized keywords
     if search_type == "all keywords":
@@ -233,12 +238,14 @@ def handler_text_search(indices, text, search_type):
     try:
         start_time = time.perf_counter()  # Capture start time
         st.session_state.executed_query = full_text_search_query
-        results = container.query_items(full_text_search_query, enable_cross_partition_query=True)
+        results = container.query_items(full_text_search_query, enable_cross_partition_query=True, populate_query_metrics=True)
         results_list = list(results)
         elapsed_time = log_time(start_time)
         st.session_state.suggested_listings = pd.DataFrame(results_list)
         st.session_state.query_time = elapsed_time
         st.session_state.ru_consumed = container.client_connection.last_response_headers['x-ms-request-charge']
+        total_execution_time = parse_server_query_time(container.client_connection.last_response_headers['x-ms-documentdb-query-metrics'])
+        st.session_state.server_query_time = total_execution_time
     except exceptions.CosmosHttpResponseError as e:
         st.error(f"An error occurred: {e}")
 
@@ -266,12 +273,14 @@ def handler_text_ranking(indices, text):
     try:
         start_time = time.perf_counter()  # Capture start time
         st.session_state.executed_query = full_text_ranking_query
-        results = container.query_items(full_text_ranking_query, enable_cross_partition_query=True)
+        results = container.query_items(full_text_ranking_query, enable_cross_partition_query=True,populate_query_metrics=True)
         results_list = list(results)
         elapsed_time = log_time(start_time)
         st.session_state.suggested_listings = pd.DataFrame(results_list)
         st.session_state.query_time = elapsed_time
         st.session_state.ru_consumed = container.client_connection.last_response_headers['x-ms-request-charge']
+        total_execution_time = parse_server_query_time(container.client_connection.last_response_headers['x-ms-documentdb-query-metrics'])
+        st.session_state.server_query_time = total_execution_time
     except exceptions.CosmosHttpResponseError as e:
         st.error(f"An error occurred: {e}")
 
@@ -287,8 +296,10 @@ def handler_hybrid_ranking(indices, text):
     full_hybrid_ranking_query = f'''
     SELECT TOP {num_results} l.id, l.title, l.abstract
     FROM l
-    ORDER BY RANK RRF(VectorDistance(l.embedding, {emb}), FullTextScore(l.abstract,[{formatted_keywords}]))
+    ORDER BY RANK RRF(FullTextScore(l.abstract,[{formatted_keywords}]),VectorDistance(l.embedding, {emb}))
     '''
+
+    obfuscated_query = full_hybrid_ranking_query.replace(str(emb), "REDACTED")
 
     container = {
         'No Index': st.session_state.cosmos_container,
@@ -298,13 +309,15 @@ def handler_hybrid_ranking(indices, text):
 
     try:
         start_time = time.perf_counter()  # Capture start time
-        st.session_state.executed_query = full_hybrid_ranking_query
-        results = container.query_items(full_hybrid_ranking_query, enable_cross_partition_query=True)
+        st.session_state.executed_query = obfuscated_query
+        results = container.query_items(full_hybrid_ranking_query, enable_cross_partition_query=True,populate_query_metrics=True)
         results_list = list(results)
         elapsed_time = log_time(start_time)
         st.session_state.suggested_listings = pd.DataFrame(results_list)
         st.session_state.query_time = elapsed_time
         st.session_state.ru_consumed = container.client_connection.last_response_headers['x-ms-request-charge']
+        total_execution_time = parse_server_query_time(container.client_connection.last_response_headers['x-ms-documentdb-query-metrics'])
+        st.session_state.server_query_time = total_execution_time
     except exceptions.CosmosHttpResponseError as e:
         st.error(f"An error occurred: {e}")
 
@@ -315,6 +328,14 @@ def render_cta_link(url, label, font_awesome_icon):
         unsafe_allow_html=True)
     button_code = f'''<a href="{url}" target=_blank><i class="fa {font_awesome_icon}"></i> {label}</a>'''
     return st.markdown(button_code, unsafe_allow_html=True)
+
+def parse_server_query_time(query_metrics):
+    metrics_parts = query_metrics.split(";")
+    total_execution_time_ms = next(
+        (part.split("=")[1] for part in metrics_parts if "totalExecutionTimeInMs" in part), "0"
+    )
+    total_execution_time_s = float(total_execution_time_ms) / 1000
+    return f"{total_execution_time_s:.4f} seconds"
 
 def render_search():
     search_disabled = True
@@ -350,10 +371,11 @@ def render_search():
 def render_search_result():
     col1 = st.container()
     col1.write(f"Executed query: {st.session_state.executed_query}")
-    col1.write(f"Found {len(st.session_state.suggested_listings)} listings.")
     col1.write(f"Embedding generation time: {st.session_state.embedding_gen_time}")
-    col1.write(f"Query time: {st.session_state.query_time}")
+    col1.write(f"Total end-to-end query execution time: {st.session_state.query_time}")
+    col1.write(f"Total server query execution time: {st.session_state.server_query_time}")
     col1.write(f"RU consumed: {st.session_state.ru_consumed}")
+    col1.write(f"Found {len(st.session_state.suggested_listings)} records.")
     col1.table(st.session_state.suggested_listings)
 
 # Main execution
